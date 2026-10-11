@@ -258,7 +258,9 @@ antes en protoboard:
 
 ```
 firmware/        Proyecto STM32CubeIDE/CMake (CM7/, CM4/, Common/ para IPC)
+common/          Código compartido entre firmwares (protocolo UART de la pantalla)
 pc/              Herramientas en Python
+  display_sim/   Simulador de la STM32H745 para probar la pantalla
   pid_bench/     Control PID del motor con hot-swap
   monitor/       Receptor de alertas/telemetría por Ethernet
   dsp_proto/     Prototipos de DOA, beamforming y features

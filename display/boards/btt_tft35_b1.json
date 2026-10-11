@@ -1,0 +1,33 @@
+{
+  "build": {
+    "core": "stm32",
+    "cpu": "cortex-m3",
+    "extra_flags": "-DSTM32F2 -DSTM32F207xx",
+    "f_cpu": "120000000L",
+    "mcu": "stm32f207vct6",
+    "product_line": "STM32F207xx"
+  },
+  "debug": {
+    "jlink_device": "STM32F207VC",
+    "openocd_target": "stm32f2x",
+    "svd_path": "STM32F20x.svd"
+  },
+  "frameworks": [
+    "stm32cube"
+  ],
+  "name": "BIGTREETECH TFT35 B1 V3.0 (STM32F207VC, app at 0x08008000)",
+  "upload": {
+    "offset_address": "0x08008000",
+    "maximum_ram_size": 114688,
+    "maximum_size": 229376,
+    "protocol": "stlink",
+    "protocols": [
+      "stlink",
+      "jlink",
+      "cmsis-dap",
+      "blackmagic"
+    ]
+  },
+  "url": "https://bttwiki.com/TFT35.html",
+  "vendor": "BIGTREETECH"
+}

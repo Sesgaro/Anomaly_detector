@@ -1,0 +1,15 @@
+# PlatformIO
+.pio/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+
+# KiCad
+*-backups/
+*.kicad_prl
+fp-info-cache
+
+# Datos
+data/

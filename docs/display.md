@@ -87,12 +87,12 @@ programar y depurar con un ST-Link.
 
 - El bootloader de BTT ocupa `0x08000000–0x08007FFF`; la aplicación arranca en
   **`0x08008000`**.
-- **Por microSD** (conserva el bootloader): copiar
-  `display/.pio/build/tft35_b1/BIGTREE_TFT35_V3.0_B1.bin` a la raíz de una
-  microSD FAT32 de 8 GB o menos y reiniciar la pantalla. El bootloader lo
+- **Por microSD** (conserva el bootloader; no requiere programador): copiar
+  `display/.pio/build/tft35_b1/BIGTREE_TFT35_V3.0_B1.01.x.bin` a la raíz de
+  una microSD FAT32 de 8 GB o menos y reiniciar la pantalla. El bootloader lo
   instala y lo renombra a `.CUR`.
-- **Por SWD** (ST-Link): `pio run -t upload` escribe desde `0x08008000` sin
-  tocar el bootloader.
-- Respaldo: antes de nada conviene guardar la flash original completa con el
-  ST-Link (`st-flash read respaldo_tft35.bin 0x08000000 0x40000`), para poder
-  volver al firmware de impresora.
+- **Volver al firmware de impresora**: copiar a la microSD el `.bin` oficial
+  de BTT para la B1 (`BIGTREE_TFT35_V3.0_B1.28.x.bin`; versión GD:
+  `BIGTREE_GD_TFT35_V3.0_B1.28.x.bin`).
+- **Por SWD**: requiere un ST-Link/J-Link externo. El ST-Link V3E integrado en
+  la NUCLEO-H745ZI-Q no puede programar otro microcontrolador.
