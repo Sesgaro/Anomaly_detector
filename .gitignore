@@ -13,3 +13,9 @@ fp-info-cache
 
 # Datos
 data/
+
+# Simulador de la interfaz
+tools/ui_sim/build/
+tools/ui_sim/build*/
+tools/ui_sim/out/
+tools/ui_sim/ui_sim
