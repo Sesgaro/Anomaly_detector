@@ -104,6 +104,7 @@ static void handle_frame(void)
     case DL_MSG_FW_BEGIN:
     case DL_MSG_FW_DATA:
     case DL_MSG_FW_END:
+    case DL_MSG_FW_INFO_REQ:
         fwupdate_handle(parser.type, parser.payload, parser.len);
         break;
     default:

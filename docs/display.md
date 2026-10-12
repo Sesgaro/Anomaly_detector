@@ -96,7 +96,32 @@ programar y depurar con un ST-Link.
   `BIGTREE_GD_TFT35_V3.0_B1.28.x.bin`).
 - **Por SWD con el ST-Link de la Nucleo**: ver la sección siguiente.
 
-## Actualizar la pantalla por UART (uso normal)
+## Actualizar la pantalla desde la STM32H745 (uso normal)
+
+La H745 lleva incrustado el firmware de la pantalla. Para cambiar la pantalla
+basta con programar la H745:
+
+```bash
+cd firmware
+pio run -t upload        # compila display/, lo incrusta y programa la H745
+```
+
+Al arrancar, la H745 pide `FW_INFO` a la pantalla por USART6 (PG14 → RX2,
+PG9 ← TX2). Si el CRC no coincide con el incrustado, le manda la imagen nueva
+(unos 25 s a 115200 baud) y luego confirma que quedó "al día". El progreso se
+ve en la pantalla, en los LEDs de la rueda (violeta) y en el log de la H745
+por el puerto virtual del ST-Link (`/dev/ttyACM0`, 115200).
+
+- Botón USER de la Nucleo: fuerza la actualización.
+- USER presionado al dar RESET: modo programador (la H745 suelta su SWD para
+  programar la pantalla con el ST-Link; LD3 parpadea).
+
+La pantalla guarda la imagen en su flash SPI (W25Q64, 8 MB), verifica CRC32 y
+tabla de vectores, y una rutina en RAM la copia a `0x08008000`. Si la flash
+SPI no responde, usa un modo directo que graba conforme llega (si se
+interrumpe, se recupera por SWD o microSD).
+
+## Actualizar la pantalla por UART desde la PC
 
 Una vez que la pantalla tiene el firmware propio, las siguientes versiones se
 cargan **por el mismo UART del enlace** (RX2/TX2), sin ST-Link ni cambiar

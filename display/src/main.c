@@ -12,6 +12,7 @@
 #include "lv_port.h"
 #include "ui.h"
 #include "fwupdate.h"
+#include "knob.h"
 #include "lvgl.h"
 
 int main(void)
@@ -20,6 +21,8 @@ int main(void)
 
     uint16_t lcd_id = lcd_init();
     touch_init();
+    knob_init();
+    fwupdate_init();
 
     settings_load();
     hw_backlight_set(settings()->brightness);

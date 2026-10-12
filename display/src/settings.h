@@ -11,6 +11,7 @@ typedef struct {
     uint8_t     brightness;   /* 10–100 % */
     uint8_t     cal_valid;
     touch_cal_t cal;
+    uint8_t     led_on;       /* LEDs de la rueda encendidos (v2) */
 } settings_t;
 
 /* Devuelve false si no había ajustes válidos (se cargan los de fábrica). */

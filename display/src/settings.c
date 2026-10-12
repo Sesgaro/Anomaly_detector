@@ -4,7 +4,7 @@
 #include <string.h>
 
 #define SETTINGS_MAGIC   0x41444554u   /* "TEDA" */
-#define SETTINGS_VERSION 1u
+#define SETTINGS_VERSION 2u
 
 typedef struct {
     uint32_t   magic;
@@ -13,9 +13,17 @@ typedef struct {
     settings_t data;
 } stored_t;
 
+/* Versión 1 (fase 0), para conservar la calibración al actualizar */
+typedef struct {
+    uint8_t     brightness;
+    uint8_t     cal_valid;
+    touch_cal_t cal;
+} settings_v1_t;
+
 static settings_t current = {
     .brightness = 80,
     .cal_valid = 0,
+    .led_on = 1,
 };
 static bool flash_ok;
 
@@ -38,11 +46,24 @@ bool settings_load(void)
         return false;
 
     w25q_read(settings_addr(), &st, sizeof(st));
-    if (st.magic != SETTINGS_MAGIC || st.version != SETTINGS_VERSION ||
-        st.crc != crc_of(&st.data))
+    if (st.magic != SETTINGS_MAGIC)
         return false;
 
-    current = st.data;
+    if (st.version == 1u) {
+        settings_v1_t v1;
+        memcpy(&v1, &st.data, sizeof(v1));
+        if (st.crc != dl_crc16(0xFFFFu, (const uint8_t *)&v1, sizeof(v1)))
+            return false;
+        current.brightness = v1.brightness;
+        current.cal_valid = v1.cal_valid;
+        current.cal = v1.cal;
+        current.led_on = 1;
+        settings_save();
+    } else if (st.version == SETTINGS_VERSION && st.crc == crc_of(&st.data)) {
+        current = st.data;
+    } else {
+        return false;
+    }
     if (current.brightness < 10 || current.brightness > 100)
         current.brightness = 80;
     return true;

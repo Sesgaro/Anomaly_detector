@@ -12,6 +12,7 @@
 
 static SPI_HandleTypeDef hspi3;
 static uint32_t flash_size;
+static uint32_t flash_jedec;
 
 static inline void cs_low(void)  { HAL_GPIO_WritePin(FLASH_CS_PORT, FLASH_CS_PIN, GPIO_PIN_RESET); }
 static inline void cs_high(void) { HAL_GPIO_WritePin(FLASH_CS_PORT, FLASH_CS_PIN, GPIO_PIN_SET); }
@@ -86,23 +87,41 @@ bool w25q_init(void)
     if (HAL_SPI_Init(&hspi3) != HAL_OK)
         return false;
 
-    uint8_t cmd = CMD_JEDEC_ID, id[3] = {0};
-    cs_low();
-    tx(&cmd, 1);
-    rx(id, 3);
-    cs_high();
+    /* El bootloader pudo dejarla en power-down o a medio comando: liberar
+     * (0xAB) y reiniciar (0x66 + 0x99) antes de leer el ID. */
+    static const uint8_t wake[] = { 0xAB }, rst_en[] = { 0x66 }, rst[] = { 0x99 };
+    cs_low(); tx(wake, 1); cs_high();
+    HAL_Delay(1);
+    cs_low(); tx(rst_en, 1); cs_high();
+    cs_low(); tx(rst, 1); cs_high();
+    HAL_Delay(1);
 
-    /* El tercer byte codifica la capacidad como 2^n bytes */
-    if (id[0] == 0x00 || id[0] == 0xFF || id[2] < 0x10 || id[2] > 0x19)
-        return false;
-
-    flash_size = 1ul << id[2];
-    return true;
+    uint8_t id[3] = {0};
+    for (int attempt = 0; attempt < 3; attempt++) {
+        uint8_t cmd = CMD_JEDEC_ID;
+        cs_low();
+        tx(&cmd, 1);
+        rx(id, 3);
+        cs_high();
+        flash_jedec = ((uint32_t)id[0] << 16) | ((uint32_t)id[1] << 8) | id[2];
+        /* El tercer byte codifica la capacidad como 2^n bytes */
+        if (id[0] != 0x00 && id[0] != 0xFF && id[2] >= 0x10 && id[2] <= 0x19) {
+            flash_size = 1ul << id[2];
+            return true;
+        }
+        HAL_Delay(2);
+    }
+    return false;
 }
 
 uint32_t w25q_size(void)
 {
     return flash_size;
+}
+
+uint32_t w25q_jedec(void)
+{
+    return flash_jedec;
 }
 
 void w25q_read(uint32_t addr, void *buf, uint32_t len)

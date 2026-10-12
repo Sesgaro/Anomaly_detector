@@ -14,7 +14,7 @@
 
 /* Memoria interna de LVGL */
 #define LV_MEM_CUSTOM           0
-#define LV_MEM_SIZE             (36U * 1024U)
+#define LV_MEM_SIZE             (56U * 1024U)
 
 /* Tick a partir de HAL_GetTick() */
 #define LV_TICK_CUSTOM          1
@@ -25,10 +25,11 @@
 #define LV_INDEV_DEF_READ_PERIOD 20
 #define LV_DPI_DEF              130
 
-/* Fuentes (14 y 20 px; solo ASCII + "°"; por eso los textos de la interfaz van sin tildes) */
-#define LV_FONT_MONTSERRAT_14   1
-#define LV_FONT_MONTSERRAT_20   1
-#define LV_FONT_DEFAULT         &lv_font_montserrat_14
+/* Fuentes propias (src/fonts, generadas con tools/fontgen) con tildes e
+ * íconos; las integradas de LVGL quedan deshabilitadas. */
+#define LV_FONT_MONTSERRAT_14   0
+#define LV_FONT_CUSTOM_DECLARE  LV_FONT_DECLARE(font_body)
+#define LV_FONT_DEFAULT         &font_body
 
 /* Widgets que no se usan (ahorran flash) */
 #define LV_USE_CALENDAR         0

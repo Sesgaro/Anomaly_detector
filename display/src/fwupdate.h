@@ -21,6 +21,10 @@ void fwupdate_handle(uint8_t type, const uint8_t *payload, uint8_t len);
 /* Cancela por inactividad y quita los mensajes; llamar en el lazo. */
 void fwupdate_poll(void);
 
+/* Calcula el CRC32 del firmware en ejecución (llamar al arrancar). */
+void fwupdate_init(void);
+uint32_t fwupdate_running_crc(void);
+
 /* true mientras hay una actualización en curso */
 bool fwupdate_active(void);
 

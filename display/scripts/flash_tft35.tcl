@@ -15,13 +15,18 @@ adapter speed 480
 
 init
 
-if {[catch {set idcode [lindex [read_memory 0xE0042000 32 1] 0]} err]} {
-    echo "ERROR: no se pudo leer el ID del chip ($err)."
-    echo "Revisa el cableado SWD y que la pantalla esté encendida."
-    shutdown error
+# La primera lectura justo después de conectar a veces devuelve 0: reintentar
+set devid 0
+for {set i 0} {$i < 5} {incr i} {
+    if {[catch {set idcode [lindex [read_memory 0xE0042000 32 1] 0]} err]} {
+        echo "ERROR: no se pudo leer el ID del chip ($err)."
+        echo "Revisa el cableado SWD y que la pantalla esté encendida."
+        shutdown error
+    }
+    set devid [expr {$idcode & 0xFFF}]
+    if {$devid != 0} { break }
+    sleep 50
 }
-
-set devid [expr {$idcode & 0xFFF}]
 if {$devid != 0x411} {
     echo [format "ERROR: el chip conectado tiene DEV_ID 0x%03X; la pantalla (STM32F20x) es 0x411." $devid]
     echo "No se escribió nada. Si es 0x450, el ST-Link está viendo la STM32H745 de la Nucleo."
