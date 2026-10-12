@@ -33,6 +33,8 @@ enum {
     DL_MSG_FW_DATA     = 0x11, /* PC/H745 -> pantalla: offset u32 + datos      */
     DL_MSG_FW_END      = 0x12, /* PC/H745 -> pantalla: verificar e instalar    */
     DL_MSG_FW_ACK      = 0x13, /* pantalla -> PC/H745: dl_fw_ack_t             */
+    DL_MSG_FW_INFO_REQ = 0x14, /* PC/H745 -> pantalla: ¿qué firmware tienes?   */
+    DL_MSG_FW_INFO     = 0x15, /* pantalla -> PC/H745: dl_fw_info_t            */
 };
 
 /* ------------------------------------------------ actualización de firmware */
@@ -53,6 +55,15 @@ typedef struct __attribute__((packed)) {
     uint32_t size;             /* bytes del .bin                              */
     uint32_t crc32;            /* CRC-32 (zlib) del .bin completo             */
 } dl_fw_begin_t;
+
+/* Firmware en ejecución: la H745 lo compara con el que lleva incrustado */
+typedef struct __attribute__((packed)) {
+    uint32_t crc32;            /* CRC-32 (zlib) de la imagen en flash         */
+    uint32_t size;             /* bytes (múltiplo de 4)                       */
+    char     version[8];       /* p. ej. "0.2"                                */
+    uint32_t flash_jedec;      /* ID de la flash SPI (0 = no responde)        */
+    uint32_t flash_size;       /* bytes de la flash SPI (0 = no detectada)    */
+} dl_fw_info_t;
 
 typedef struct __attribute__((packed)) {
     uint8_t  status;           /* DL_FW_*                                     */
