@@ -94,5 +94,89 @@ programar y depurar con un ST-Link.
 - **Volver al firmware de impresora**: copiar a la microSD el `.bin` oficial
   de BTT para la B1 (`BIGTREE_TFT35_V3.0_B1.28.x.bin`; versión GD:
   `BIGTREE_GD_TFT35_V3.0_B1.28.x.bin`).
-- **Por SWD**: requiere un ST-Link/J-Link externo. El ST-Link V3E integrado en
-  la NUCLEO-H745ZI-Q no puede programar otro microcontrolador.
+- **Por SWD con el ST-Link de la Nucleo**: ver la sección siguiente.
+
+## Programar la pantalla con el ST-Link de la NUCLEO-H745ZI-Q
+
+En la Nucleo, el conector **CN5** (MIPI-10) está conectado a las mismas
+líneas SWD que van a la STM32H745 (PA13/PA14). Si se cablea la pantalla a CN5
+sin más, el ST-Link ve **dos chips en el mismo bus** y no funciona (o
+programa la H745). Hay que sacar a la H745 del bus primero.
+
+### Paso 1: aislar la H745 (sin soldar)
+
+El programa auxiliar `tools/h745_liberar_swd` pone PA13/PA14 de la H745 en
+modo analógico después de 2 s, así que la H745 deja de responder por SWD. LD1
+(verde) parpadea mientras está activo.
+
+1. Desconectar los cables de la pantalla de CN5.
+2. Cargar el programa en la H745 por el USB del ST-Link:
+   ```bash
+   cd tools/h745_liberar_swd
+   pio run -t upload
+   ```
+3. Esperar a que LD1 parpadee.
+
+Para volver a programar la H745 en las fases siguientes: desconectar la
+pantalla de CN5 y conectar en modo **"Under reset"** (STM32CubeProgrammer:
+*Mode: Under reset*; o mantener presionado RESET al iniciar la conexión).
+
+Alternativa con soldador: abrir los puentes de soldadura entre las líneas SWD
+del ST-Link y la H745. **No pude verificar sus nombres** (el resumen del
+UM2408 menciona SB46 y SB51); hay que confirmarlos en el esquemático MB1363
+antes de cortar, y resoldarlos después para volver a usar la H745.
+
+### Paso 2: cablear CN5 a la pantalla
+
+CN5 es MIPI-10 (2×5, paso de 1.27 mm). Pinout estándar MIPI-10:
+
+| CN5 | Señal | Pantalla (conector SWD) |
+|---|---|---|
+| 1 | VTref (3.3 V de la Nucleo) | **no conectar** |
+| 2 | SWDIO | DIO |
+| 3, 5, 9 | GND | GND |
+| 4 | SWCLK | CLK |
+| 6 | SWO | no conectar |
+| 10 | NRST | **no conectar** (también resetea la H745) |
+
+> El resumen del UM2408 que se usó pone SWDIO en el pin 4 y SWCLK en el 6, lo
+> que no coincide con el estándar MIPI-10 ni con otras fuentes (SWDIO = 2,
+> SWCLK = 4). Verificar con un multímetro: continuidad entre CN5-2 y el pin
+> PA13 del conector morpho CN11, y entre CN5-4 y PA14.
+
+**Alternativa más cómoda que CN5:** como las líneas SWD del ST-Link llegan a
+PA13/PA14 de la H745, también salen por el conector morpho **CN11** (pines de
+2.54 mm, normalmente CN11-13 = PA13/SWDIO y CN11-15 = PA14/SWCLK; confirmar
+con la tabla del UM2408 o con continuidad). Con la H745 aislada por
+`tools/h745_liberar_swd`, basta con cables dupont:
+CN11 PA13 → DIO, CN11 PA14 → CLK, GND → GND.
+
+- La pantalla se alimenta con su propio 5 V (conector RS232/TFT o el USB de la
+  ESP32); **GND común** con la Nucleo.
+- La Nucleo se alimenta por el USB del ST-Link (CN1).
+
+### Paso 3: cargar
+
+```bash
+cd display
+pio run -t upload
+```
+
+`scripts/flash_tft35.tcl` lee el ID del chip antes de escribir:
+
+- **0x411** (STM32F20x, la pantalla): escribe desde `0x08008000`, verifica y
+  reinicia. El bootloader de BTT no se toca.
+- Cualquier otro (p. ej. **0x450**, la STM32H745): aborta sin escribir nada.
+
+Si OpenOCD no puede abrir el ST-Link (`LIBUSB_ERROR_ACCESS`), faltan las
+reglas udev de PlatformIO:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/platformio/platformio-core/develop/platformio/assets/system/99-platformio-udev.rules | sudo tee /etc/udev/rules.d/99-platformio-udev.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+Con STM32CubeProgrammer: conectar por SWD, comprobar que el *Device ID* sea
+**0x411** (STM32F2xx) y no 0x450 (STM32H7), y cargar
+`display/.pio/build/tft35_b1/firmware.bin` en la dirección **0x08008000** sin
+borrar todo el chip (*Full chip erase* desactivado).

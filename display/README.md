@@ -54,11 +54,17 @@ El firmware queda en `0x08008000` y el bootloader de BTT no se toca, así que
 *Copy to SD Card root directory to update* del repositorio
 [BIGTREETECH-TouchScreenFirmware](https://github.com/bigtreetech/BIGTREETECH-TouchScreenFirmware).
 
-**Por SWD** (opcional, para depurar): requiere un programador externo
-(ST-Link V2/V3 o J-Link) conectado al conector SWD de la pantalla (3.3V, DIO,
-GND, CLK, RST) y `pio run -t upload`. El ST-Link integrado de la Nucleo-144
-**no** sirve para programar otro microcontrolador: ST lo diseñó solo para el
-STM32H7 de la placa.
+**Por SWD con un ST-Link**, incluido el de la Nucleo: seguir
+[docs/display.md](../docs/display.md#programar-la-pantalla-con-el-st-link-de-la-nucleo-h745zi-q).
+Con la Nucleo hay que aislar primero la H745 (`tools/h745_liberar_swd`).
+Luego:
+
+```bash
+pio run -t upload
+```
+
+Antes de escribir, la carga verifica que el chip sea el STM32F20x de la
+pantalla (DEV_ID 0x411); si detecta otro, aborta sin tocar nada.
 
 ## Probar sin la STM32H745
 
