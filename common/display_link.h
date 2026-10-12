@@ -27,7 +27,37 @@ enum {
     DL_MSG_CONFIG      = 0x03, /* ambos sentidos: configuración de DOA          */
     DL_MSG_ACK_ALARM   = 0x04, /* pantalla -> H745: alarma reconocida           */
     DL_MSG_REQ_PARAMS  = 0x05, /* pantalla -> H745: pide umbrales y config      */
+
+    /* Actualización del firmware de la pantalla por el mismo UART */
+    DL_MSG_FW_BEGIN    = 0x10, /* PC/H745 -> pantalla: dl_fw_begin_t           */
+    DL_MSG_FW_DATA     = 0x11, /* PC/H745 -> pantalla: offset u32 + datos      */
+    DL_MSG_FW_END      = 0x12, /* PC/H745 -> pantalla: verificar e instalar    */
+    DL_MSG_FW_ACK      = 0x13, /* pantalla -> PC/H745: dl_fw_ack_t             */
 };
+
+/* ------------------------------------------------ actualización de firmware */
+
+#define DL_FW_CHUNK 56u        /* bytes de datos por trama FW_DATA            */
+
+enum {
+    DL_FW_OK         = 0,
+    DL_FW_ERR_SIZE   = 1,      /* imagen demasiado grande o vacía             */
+    DL_FW_ERR_SEQ    = 2,      /* offset inesperado (next_offset dice cuál)   */
+    DL_FW_ERR_CRC    = 3,      /* CRC32 de la imagen no coincide              */
+    DL_FW_ERR_FLASH  = 4,      /* falla de la flash SPI                       */
+    DL_FW_ERR_IMAGE  = 5,      /* tabla de vectores inválida                  */
+    DL_FW_ERR_STATE  = 6,      /* FW_DATA/FW_END sin FW_BEGIN                 */
+};
+
+typedef struct __attribute__((packed)) {
+    uint32_t size;             /* bytes del .bin                              */
+    uint32_t crc32;            /* CRC-32 (zlib) del .bin completo             */
+} dl_fw_begin_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t  status;           /* DL_FW_*                                     */
+    uint32_t next_offset;      /* siguiente offset esperado                   */
+} dl_fw_ack_t;
 
 /* Niveles de alerta */
 enum {

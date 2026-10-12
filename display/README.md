@@ -54,13 +54,26 @@ El firmware queda en `0x08008000` y el bootloader de BTT no se toca, así que
 *Copy to SD Card root directory to update* del repositorio
 [BIGTREETECH-TouchScreenFirmware](https://github.com/bigtreetech/BIGTREETECH-TouchScreenFirmware).
 
-**Por SWD con un ST-Link**, incluido el de la Nucleo: seguir
+**Por UART (uso normal)**: si la pantalla ya tiene este firmware, se
+actualiza por el mismo UART del enlace, a través del puente USB-UART (ESP32),
+sin cambiar cables:
+
+```bash
+pio run -t upload --upload-port /dev/ttyUSB0
+```
+
+La imagen se guarda en la flash SPI, se verifican el CRC32 y la tabla de
+vectores, y una rutina en RAM la copia a `0x08008000`. Si falla a medio
+camino, el bootloader de BTT sigue intacto y se recupera por SWD o microSD.
+
+**Por SWD con un ST-Link** (primera carga o recuperación), incluido el de la
+Nucleo: seguir
 [docs/display.md](../docs/display.md#programar-la-pantalla-con-el-st-link-de-la-nucleo-h745zi-q).
 Con la Nucleo hay que aislar primero la H745 (`tools/h745_liberar_swd`).
 Luego:
 
 ```bash
-pio run -t upload
+pio run -e tft35_b1_swd -t upload
 ```
 
 Antes de escribir, la carga verifica que el chip sea el STM32F20x de la
@@ -105,6 +118,10 @@ CRC-16/CCITT` a 115200 8N1:
 | `0x03` CONFIG | ambos | número de micrófonos, modo DOA, ángulo de enfoque |
 | `0x04` ACK_ALARM | pantalla → H745 | alarma reconocida |
 | `0x05` REQ_PARAMS | pantalla → H745 | pide umbrales y configuración (se repite cada 2 s hasta recibirlos) |
+| `0x10` FW_BEGIN | PC/H745 → pantalla | tamaño y CRC32 del firmware nuevo |
+| `0x11` FW_DATA | PC/H745 → pantalla | offset + hasta 56 bytes |
+| `0x12` FW_END | PC/H745 → pantalla | verificar e instalar |
+| `0x13` FW_ACK | pantalla → PC/H745 | estado y siguiente offset esperado |
 
 ## Pendiente de verificar en la placa
 

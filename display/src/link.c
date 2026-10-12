@@ -1,5 +1,6 @@
 #include "link.h"
 #include "board.h"
+#include "fwupdate.h"
 #include <string.h>
 
 #define RX_BUF_SIZE 256u   /* potencia de 2 */
@@ -69,7 +70,7 @@ void link_irq(void)
     }
 }
 
-static void send(uint8_t type, const void *payload, uint8_t len)
+void link_send(uint8_t type, const void *payload, uint8_t len)
 {
     uint8_t frame[DL_MAX_PAYLOAD + 5];
     size_t n = dl_encode(type, payload, len, frame);
@@ -100,6 +101,11 @@ static void handle_frame(void)
             have_config = true;
         }
         break;
+    case DL_MSG_FW_BEGIN:
+    case DL_MSG_FW_DATA:
+    case DL_MSG_FW_END:
+        fwupdate_handle(parser.type, parser.payload, parser.len);
+        break;
     default:
         break;
     }
@@ -116,9 +122,10 @@ void link_poll(void)
 
     /* Mientras no tengamos umbrales y configuración, pedirlos periódicamente */
     uint32_t now = HAL_GetTick();
-    if ((!have_thresholds || !have_config) && (now - last_req_ms) >= REQ_PERIOD_MS) {
+    if ((!have_thresholds || !have_config) && !fwupdate_active() &&
+        (now - last_req_ms) >= REQ_PERIOD_MS) {
         last_req_ms = now;
-        send(DL_MSG_REQ_PARAMS, NULL, 0);
+        link_send(DL_MSG_REQ_PARAMS, NULL, 0);
     }
 }
 
@@ -148,17 +155,17 @@ bool link_config(dl_config_t *out)
 
 void link_send_thresholds(const dl_thresholds_t *t)
 {
-    send(DL_MSG_THRESHOLDS, t, sizeof(*t));
+    link_send(DL_MSG_THRESHOLDS, t, sizeof(*t));
 }
 
 void link_send_config(const dl_config_t *c)
 {
-    send(DL_MSG_CONFIG, c, sizeof(*c));
+    link_send(DL_MSG_CONFIG, c, sizeof(*c));
 }
 
 void link_send_ack_alarm(void)
 {
-    send(DL_MSG_ACK_ALARM, NULL, 0);
+    link_send(DL_MSG_ACK_ALARM, NULL, 0);
 }
 
 uint32_t link_rx_frames(void)

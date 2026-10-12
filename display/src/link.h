@@ -22,6 +22,9 @@ const dl_status_t *link_status(void);
 bool link_thresholds(dl_thresholds_t *out);
 bool link_config(dl_config_t *out);
 
+/* Envía una trama cualquiera */
+void link_send(uint8_t type, const void *payload, uint8_t len);
+
 void link_send_thresholds(const dl_thresholds_t *t);
 void link_send_config(const dl_config_t *c);
 void link_send_ack_alarm(void);

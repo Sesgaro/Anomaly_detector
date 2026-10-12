@@ -11,6 +11,7 @@
 #include "calib.h"
 #include "lv_port.h"
 #include "ui.h"
+#include "fwupdate.h"
 #include "lvgl.h"
 
 int main(void)
@@ -39,6 +40,7 @@ int main(void)
     for (;;) {
         link_poll();
         calib_poll();
+        fwupdate_poll();
         ui_update();
         lv_timer_handler();
     }

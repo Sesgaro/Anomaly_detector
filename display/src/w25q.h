@@ -10,6 +10,7 @@ uint32_t w25q_size(void);
 
 void w25q_read(uint32_t addr, void *buf, uint32_t len);
 void w25q_erase_sector(uint32_t addr);               /* sector de 4 KB */
+void w25q_erase_block64(uint32_t addr);              /* bloque de 64 KB */
 void w25q_write(uint32_t addr, const void *buf, uint32_t len);
 
 #endif /* W25Q_H */

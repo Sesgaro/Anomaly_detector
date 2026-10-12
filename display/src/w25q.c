@@ -6,6 +6,7 @@
 #define CMD_READ_DATA     0x03
 #define CMD_PAGE_PROGRAM  0x02
 #define CMD_SECTOR_ERASE  0x20
+#define CMD_BLOCK64_ERASE 0xD8
 #define CMD_JEDEC_ID      0x9F
 #define PAGE_SIZE         256u
 
@@ -40,7 +41,7 @@ static void wait_busy(void)
     tx(&cmd, 1);
     do {
         rx(&st, 1);
-    } while ((st & 0x01u) && (HAL_GetTick() - t0) < 500u);
+    } while ((st & 0x01u) && (HAL_GetTick() - t0) < 3000u);
     cs_high();
 }
 
@@ -124,6 +125,15 @@ void w25q_erase_sector(uint32_t addr)
     write_enable();
     cs_low();
     send_addr_cmd(CMD_SECTOR_ERASE, addr & ~0xFFFul);
+    cs_high();
+    wait_busy();
+}
+
+void w25q_erase_block64(uint32_t addr)
+{
+    write_enable();
+    cs_low();
+    send_addr_cmd(CMD_BLOCK64_ERASE, addr & ~0xFFFFul);
     cs_high();
     wait_busy();
 }

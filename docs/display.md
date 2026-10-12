@@ -96,7 +96,26 @@ programar y depurar con un ST-Link.
   `BIGTREE_GD_TFT35_V3.0_B1.28.x.bin`).
 - **Por SWD con el ST-Link de la Nucleo**: ver la sección siguiente.
 
+## Actualizar la pantalla por UART (uso normal)
+
+Una vez que la pantalla tiene el firmware propio, las siguientes versiones se
+cargan **por el mismo UART del enlace** (RX2/TX2), sin ST-Link ni cambiar
+cables:
+
+```bash
+cd display
+pio run -t upload --upload-port /dev/ttyUSB0   # puerto del puente USB-UART (ESP32)
+```
+
+La pantalla guarda la imagen en su flash SPI, verifica el CRC32 y la tabla de
+vectores, y solo entonces una rutina en RAM la copia a `0x08008000` y
+reinicia. El bootloader de BTT no se toca: si algo falla a medio camino, se
+recupera por SWD (abajo) o por microSD. A 115200 baud tarda unos 30 s.
+
 ## Programar la pantalla con el ST-Link de la NUCLEO-H745ZI-Q
+
+Solo hace falta para la primera carga o para recuperar la pantalla.
+
 
 En la Nucleo, el conector **CN5** (MIPI-10) está conectado a las mismas
 líneas SWD que van a la STM32H745 (PA13/PA14). Si se cablea la pantalla a CN5
@@ -159,7 +178,7 @@ CN11 PA13 → DIO, CN11 PA14 → CLK, GND → GND.
 
 ```bash
 cd display
-pio run -t upload
+pio run -e tft35_b1_swd -t upload
 ```
 
 `scripts/flash_tft35.tcl` lee el ID del chip antes de escribir:
