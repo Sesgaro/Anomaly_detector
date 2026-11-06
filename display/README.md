@@ -18,7 +18,7 @@ están en [docs/display.md](../docs/display.md).
 - **Umbrales**: deslizadores con botones -/+ para los 6 umbrales. **Enviar**
   los manda a la H745; la pantalla muestra "Umbrales aplicados" cuando la H745
   los devuelve confirmados.
-- **Ajustes**: arreglo de 2 o 4 micrófonos, modo DOA (barrido o enfoque fijo)
+- **Enfoque**: arreglo de 2 o 4 micrófonos, punto de enfoque fijo y apertura del arco
   y ángulo de enfoque, brillo, calibración del táctil y diagnóstico (controlador
   del LCD, tramas recibidas y errores).
 

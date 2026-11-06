@@ -80,7 +80,13 @@ static lv_obj_t *dial_thr, *lbl_thr_status, *btn_thr_send, *btn_thr_reset;
 
 static dl_config_t cfg_edit;
 static bool cfg_loaded;
-static lv_obj_t *dial_focus, *seg_mics, *seg_mode, *lbl_cfg_status;
+static lv_obj_t *dial_focus, *seg_mics, *seg_aperture, *lbl_cfg_status;
+static dl_config_t cfg_remote;     /* última configuración confirmada por la H745 */
+static bool focus_target_aperture; /* la rueda ajusta la apertura en vez del ángulo */
+static const int aperture_presets[] = { 15, 30, 60, 90 };
+static const int presets_2mic[5] = { 0, 45, 90, 135, 180 };
+static const int presets_4mic[5] = { 0, 90, 180, 270, 45 };
+static lv_obj_t *preset_lbl[5];
 
 /* ---------------------------------------------------------------- sistema */
 
@@ -237,9 +243,10 @@ static void build_state(lv_obj_t *p)
     lv_obj_set_style_pad_all(dc, 4, 0);
     dial_doa = ui_dial_create(dc, 184);
     lv_obj_align(dial_doa, LV_ALIGN_TOP_MID, 0, 0);
-    ui_dial_set_range(dial_doa, -90, 90);
+    ui_dial_set_range(dial_doa, 0, 180);
+    ui_dial_set_sweep(dial_doa, 180);
     ui_dial_set_text(dial_doa, "--", "Ángulo DOA");
-    lbl_doa_info = m3_label(dc, "2 micrófonos · barrido", &font_body, M3_ON_SURFACE_VARIANT);
+    lbl_doa_info = m3_label(dc, "2 mic · apertura 30°", &font_body, M3_ON_SURFACE_VARIANT);
     lv_obj_align(lbl_doa_info, LV_ALIGN_BOTTOM_MID, 0, -10);
 
     m_audio = make_metric(p, IC_AUDIO, "Audio (error AE)", 72);
@@ -425,22 +432,56 @@ static void cfg_status(const char *txt, lv_color_t c)
     lv_obj_set_style_text_color(lbl_cfg_status, c, 0);
 }
 
+static int aperture_deg(const dl_config_t *c)
+{
+    int ap = c->aperture_ddeg / 10;
+    return ap < DL_APERTURE_MIN_DEG ? DL_APERTURE_MIN_DEG
+         : (ap > DL_APERTURE_MAX_DEG ? DL_APERTURE_MAX_DEG : ap);
+}
+
 static void cfg_refresh(void)
 {
-    char buf[12];
-    int lim = cfg_edit.n_mics == 4 ? 180 : 90;
+    char buf[12], cap[28];
+    bool four = cfg_edit.n_mics == 4;
     int deg = cfg_edit.focus_ddeg / 10;
+    int ap = aperture_deg(&cfg_edit);
 
-    if (deg > lim) deg = lim;
-    if (deg < -lim) deg = -lim;
+    if (four) {
+        /* Vuelta completa: 0–359°, al pasar de 359 vuelve a 0 */
+        deg %= 360;
+        if (deg < 0) deg += 360;
+    } else {
+        deg = deg < 0 ? 0 : (deg > 180 ? 180 : deg);
+    }
     cfg_edit.focus_ddeg = (int16_t)(deg * 10);
+    cfg_edit.aperture_ddeg = (uint16_t)(ap * 10);
 
-    lv_snprintf(buf, sizeof(buf), "%d°", deg);
-    ui_dial_set_range(dial_focus, -lim, lim);
+    const int *presets = four ? presets_4mic : presets_2mic;
+    for (int i = 0; i < 5; i++)
+        if (preset_lbl[i])
+            lv_label_set_text_fmt(preset_lbl[i], "%d°", presets[i]);
+
+    ui_dial_set_sweep(dial_focus, four ? 360 : 180);
+    ui_dial_set_range(dial_focus, 0, four ? 360 : 180);
     ui_dial_set_value(dial_focus, deg);
-    ui_dial_set_text(dial_focus, buf, cfg_edit.doa_mode == DL_DOA_FIXED ? "Enfoque fijo" : "Barrido");
+    ui_dial_set_band(dial_focus, true, deg - ap / 2, deg + ap / 2);
+    if (focus_target_aperture) {
+        lv_snprintf(buf, sizeof(buf), "%d°", ap);
+        lv_snprintf(cap, sizeof(cap), "Apertura");
+        ui_dial_set_accent(dial_focus, M3_TERTIARY, M3_PRIMARY_CONTAINER);
+    } else {
+        lv_snprintf(buf, sizeof(buf), "%d°", deg);
+        lv_snprintf(cap, sizeof(cap), "Apertura %d°", ap);
+        ui_dial_set_accent(dial_focus, M3_PRIMARY, M3_PRIMARY_CONTAINER);
+    }
+    ui_dial_set_text(dial_focus, buf, cap);
     m3_segmented_select(seg_mics, cfg_edit.n_mics == 4 ? 1 : 0);
-    m3_segmented_select(seg_mode, cfg_edit.doa_mode == DL_DOA_FIXED ? 1 : 0);
+
+    int sel = -1;
+    for (int i = 0; i < 4; i++)
+        if (aperture_presets[i] == ap)
+            sel = i;
+    m3_segmented_select(seg_aperture, sel);
 }
 
 static void cfg_changed(void)
@@ -449,10 +490,24 @@ static void cfg_changed(void)
     cfg_status("Cambios sin enviar", ST_ANOM);
 }
 
-static void focus_change(int deg)
+/* Paso de la rueda o de los botones: grados en ángulo o en apertura */
+static void focus_change(int steps)
 {
-    cfg_edit.focus_ddeg = (int16_t)(cfg_edit.focus_ddeg + deg * 10);
+    if (focus_target_aperture) {
+        int ap = aperture_deg(&cfg_edit) + steps * 5;
+        ap = ap < DL_APERTURE_MIN_DEG ? DL_APERTURE_MIN_DEG
+           : (ap > DL_APERTURE_MAX_DEG ? DL_APERTURE_MAX_DEG : ap);
+        cfg_edit.aperture_ddeg = (uint16_t)(ap * 10);
+    } else {
+        cfg_edit.focus_ddeg = (int16_t)(cfg_edit.focus_ddeg + steps * 10);
+    }
     cfg_changed();
+}
+
+static void focus_toggle_target(void)
+{
+    focus_target_aperture = !focus_target_aperture;
+    cfg_refresh();
 }
 
 static void focus_step_cb(lv_event_t *e)
@@ -465,22 +520,31 @@ static void focus_step_cb(lv_event_t *e)
     m3_segmented_select(seg, -1);
 }
 
+static void dial_focus_cb(lv_event_t *e)
+{
+    (void)e;
+    focus_toggle_target();
+}
+
 static void mics_cb(lv_event_t *e)
 {
     cfg_edit.n_mics = m3_segmented_selected(lv_event_get_target(e)) == 1 ? 4 : 2;
     cfg_changed();
 }
 
-static void mode_cb(lv_event_t *e)
+static void aperture_cb(lv_event_t *e)
 {
-    cfg_edit.doa_mode = m3_segmented_selected(lv_event_get_target(e)) == 1 ? DL_DOA_FIXED : DL_DOA_SCAN;
+    int i = m3_segmented_selected(lv_event_get_target(e));
+    if (i >= 0 && i < 4)
+        cfg_edit.aperture_ddeg = (uint16_t)(aperture_presets[i] * 10);
     cfg_changed();
 }
 
 static void preset_cb(lv_event_t *e)
 {
-    cfg_edit.focus_ddeg = (int16_t)((intptr_t)lv_event_get_user_data(e) * 10);
-    cfg_edit.doa_mode = DL_DOA_FIXED;
+    int i = (int)(intptr_t)lv_event_get_user_data(e);
+    const int *presets = cfg_edit.n_mics == 4 ? presets_4mic : presets_2mic;
+    cfg_edit.focus_ddeg = (int16_t)(presets[i] * 10);
     cfg_changed();
 }
 
@@ -502,14 +566,15 @@ static void build_focus(lv_obj_t *p)
 {
     static const char *steps[] = { "-10", "-1", "+1", "+10" };
     static const char *mics[] = { "2 mic", "4 mic" };
-    static const char *mode[] = { "Barrido", "Fijo" };
-    static const int presets[] = { -90, -45, 0, 45, 90 };
+    static const char *apertures[] = { "15°", "30°", "60°", "90°" };
 
     lv_obj_t *dc = m3_card(p, M3_SURFACE_CONT, 28);
     lv_obj_set_size(dc, 192, 308);
     lv_obj_set_style_pad_all(dc, 4, 0);
     dial_focus = ui_dial_create(dc, 184);
     lv_obj_align(dial_focus, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_add_flag(dial_focus, LV_OBJ_FLAG_CLICKABLE);   /* tocar: ángulo <-> apertura */
+    lv_obj_add_event_cb(dial_focus, dial_focus_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *seg = m3_segmented(dc, steps, 4, 42, 40, focus_step_cb);
     lv_obj_align(seg, LV_ALIGN_TOP_MID, 0, 192);
     lbl_cfg_status = m3_label(dc, "Esperando config. de la H745", &font_body, M3_ON_SURFACE_VARIANT);
@@ -521,14 +586,14 @@ static void build_focus(lv_obj_t *p)
     lv_obj_t *rc = m3_card(p, M3_SURFACE_CONT, 28);
     lv_obj_set_pos(rc, 200, 0);
     lv_obj_set_size(rc, 200, 254);
-    lv_obj_set_style_pad_all(rc, 14, 0);
+    lv_obj_set_style_pad_all(rc, 12, 0);
     lv_obj_set_flex_flow(rc, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(rc, 6, 0);
+    lv_obj_set_style_pad_row(rc, 4, 0);
 
     section_title(rc, "Arreglo");
-    seg_mics = m3_segmented(rc, mics, 2, 84, 38, mics_cb);
-    section_title(rc, "Modo DOA");
-    seg_mode = m3_segmented(rc, mode, 2, 84, 38, mode_cb);
+    seg_mics = m3_segmented(rc, mics, 2, 86, 34, mics_cb);
+    section_title(rc, "Apertura del arco");
+    seg_aperture = m3_segmented(rc, apertures, 4, 42, 34, aperture_cb);
     section_title(rc, "Atajos");
     lv_obj_t *row = lv_obj_create(rc);
     lv_obj_remove_style_all(row);
@@ -538,9 +603,10 @@ static void build_focus(lv_obj_t *p)
     lv_obj_set_style_pad_row(row, 4, 0);
     for (int i = 0; i < 5; i++) {
         char t[8];
-        lv_snprintf(t, sizeof(t), "%d°", presets[i]);
+        lv_snprintf(t, sizeof(t), "%d°", presets_2mic[i]);
         lv_obj_t *b = m3_button(row, t, M3_SURFACE_CONT_HIGHEST, M3_ON_SURFACE, i < 3 ? 54 : 83, 32);
-        lv_obj_add_event_cb(b, preset_cb, LV_EVENT_CLICKED, (void *)(intptr_t)presets[i]);
+        preset_lbl[i] = lv_obj_get_child(b, 0);
+        lv_obj_add_event_cb(b, preset_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
     }
 
     lv_obj_t *b = m3_button(p, IC_UPLOAD "  Enviar configuración", M3_PRIMARY, M3_ON_PRIMARY, 200, 46);
@@ -548,7 +614,8 @@ static void build_focus(lv_obj_t *p)
     lv_obj_add_event_cb(b, cfg_send_cb, LV_EVENT_CLICKED, NULL);
 
     cfg_edit.n_mics = 2;
-    cfg_edit.doa_mode = DL_DOA_SCAN;
+    cfg_edit.focus_ddeg = 900;
+    cfg_edit.aperture_ddeg = 300;
     cfg_refresh();
 }
 
@@ -640,7 +707,7 @@ static void knob_handle(void)
         if (s)
             focus_change(s);
         if (ev == KNOB_EV_CLICK)
-            cfg_send();
+            focus_toggle_target();
         break;
     case 3:
         if (s) {
@@ -760,7 +827,8 @@ static void update_state(bool alive, const dl_status_t *st)
 
     /* Dial DOA */
     bool four = (st->flags & DL_FLAG_FOUR_MICS) != 0;
-    ui_dial_set_range(dial_doa, four ? -180 : -90, four ? 180 : 90);
+    ui_dial_set_range(dial_doa, 0, four ? 360 : 180);
+    ui_dial_set_sweep(dial_doa, four ? 360 : 180);
     ui_dial_set_accent(dial_doa, lvl == DL_LEVEL_NORMAL ? M3_PRIMARY : on, M3_PRIMARY_CONTAINER);
     if (st->flags & DL_FLAG_DOA_VALID) {
         ui_dial_set_value(dial_doa, st->doa_ddeg / 10);
@@ -769,12 +837,13 @@ static void update_state(bool alive, const dl_status_t *st)
     } else {
         ui_dial_set_text(dial_doa, "--", "Sin fuente");
     }
-    lv_label_set_text_fmt(lbl_doa_info, "%d micrófonos · %s", four ? 4 : 2,
-                          cfg_edit.doa_mode == DL_DOA_FIXED ? "fijo" : "barrido");
+    int focus = cfg_remote.focus_ddeg / 10, ap = aperture_deg(&cfg_remote);
+    ui_dial_set_band(dial_doa, cfg_loaded, focus - ap / 2, focus + ap / 2);
+    lv_label_set_text_fmt(lbl_doa_info, "%d mic · apertura %d°", four ? 4 : 2, ap);
 
     metric_set(&m_audio, st->audio_score_m, thr_remote.audio_warn_m, thr_remote.audio_anom_m, 3, "");
     metric_set(&m_vib, st->vib_rms_mg, thr_remote.vib_warn_mg, thr_remote.vib_anom_mg, 0, "mg");
-    int16_t i_motor = st->current_ma[0];
+    int16_t i_motor = st->current_ma[DL_MOTOR_CH];
     metric_set(&m_curr, i_motor < 0 ? 0 : (uint16_t)i_motor,
                thr_remote.current_warn_ma, thr_remote.current_crit_ma, 0, "mA");
 }
@@ -816,11 +885,13 @@ void ui_update(void)
 
     /* Configuración recibida de la H745 */
     dl_config_t c;
-    if (link_config(&c) && !cfg_loaded) {
-        cfg_edit = c;
+    if (link_config(&c) && (!cfg_loaded || memcmp(&c, &cfg_remote, sizeof(c)) != 0)) {
+        bool was_loaded = cfg_loaded;
+        cfg_remote = c;
         cfg_loaded = true;
+        cfg_edit = c;
         cfg_refresh();
-        cfg_status("Sincronizado", ST_OK_ON);
+        cfg_status(was_loaded ? "Configuración aplicada" : "Sincronizado", ST_OK_ON);
     }
 
     const char *drv = lcd_driver() == LCD_DRV_ST7796S ? "ST7796S"

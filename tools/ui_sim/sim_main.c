@@ -17,7 +17,7 @@ static uint16_t fb[480 * 320];
 /* ---- stubs del hardware ---- */
 static dl_status_t st;
 static dl_thresholds_t thr = { 800, 1500, 300, 700, 1500, 2500 };
-static dl_config_t cfg = { 2, DL_DOA_SCAN, 0 };
+static dl_config_t cfg = { 2, 0, 1100, 300 };
 static settings_t set = { .brightness = 80, .cal_valid = 1, .led_on = 1 };
 static knob_event_t pending_ev;
 static int alive = 1;
@@ -102,18 +102,18 @@ int main(int argc, char **argv)
 
     st.level = DL_LEVEL_NORMAL;
     st.flags = DL_FLAG_DETECTOR_OK | DL_FLAG_ETH_LINK | DL_FLAG_DOA_VALID;
-    st.doa_ddeg = 375;
+    st.doa_ddeg = 1275;
     st.audio_score_m = 520;
     st.vib_rms_mg = 140;
-    st.current_ma[0] = 1100;
+    st.current_ma[DL_MOTOR_CH] = 1100;
     run(300);
     snprintf(path, sizeof path, "%s/0_estado_normal.ppm", out); save(path);
 
     st.level = DL_LEVEL_ANOMALIA;
-    st.doa_ddeg = -520;
+    st.doa_ddeg = 380;
     st.audio_score_m = 1720;
     st.vib_rms_mg = 760;
-    st.current_ma[0] = 2300;
+    st.current_ma[DL_MOTOR_CH] = 2300;
     run(300);
     snprintf(path, sizeof path, "%s/1_estado_anomalia.ppm", out); save(path);
 
@@ -127,6 +127,20 @@ int main(int argc, char **argv)
     alive = 0;
     run(300);
     snprintf(path, sizeof path, "%s/5_sin_enlace.ppm", out); save(path);
+
+    /* 4 micrófonos: vuelta completa, enfoque cerca de ±180° */
+    alive = 1;
+    cfg.n_mics = 4;
+    cfg.focus_ddeg = 2400;
+    cfg.aperture_ddeg = 600;
+    st.level = DL_LEVEL_NORMAL;
+    st.flags = DL_FLAG_DETECTOR_OK | DL_FLAG_ETH_LINK | DL_FLAG_DOA_VALID | DL_FLAG_FOUR_MICS;
+    st.doa_ddeg = 2550;
+    run(300);
+    snprintf(path, sizeof path, "%s/6_estado_4mic.ppm", out); save(path);
+    pending_ev = KNOB_EV_LONG; run(200);
+    pending_ev = KNOB_EV_LONG; run(200);
+    snprintf(path, sizeof path, "%s/7_enfoque_4mic.ppm", out); save(path);
 
     lv_mem_monitor_t mon;
     lv_mem_monitor(&mon);

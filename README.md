@@ -93,6 +93,9 @@ valores se guardan en la flash de la STM32.
 
 ## 4. Hardware e interfaces
 
+El cableado de cada sensor a los conectores Zio (CN7–CN10) de la Nucleo está en
+[docs/conexiones.md](docs/conexiones.md).
+
 ### Micrófonos: INMP441 (MEMS, salida I2S digital)
 
 - Salida I2S de 24 bits en una ranura de 32 bits. El pin `L/R` define si el
@@ -121,9 +124,9 @@ valores se guardan en la flash de la STM32.
 ### Monitor de corriente: INA3221 (I2C)
 
 - Tres canales de corriente y voltaje con resistencia shunt (rango del shunt:
-  ±163.8 mV; voltaje de bus de 0 a 26 V). El canal 1 mide la línea de **12 V
+  ±163.8 mV; voltaje de bus de 0 a 26 V). El canal 3 mide la línea de **12 V
   del motor**, que pasa por la PCB (entrada de la fuente → shunt → salida al
-  motor); los canales 2 y 3 quedan para la alimentación de la placa (por
+  motor); los canales 1 y 2 quedan para la alimentación de la placa (por
   ejemplo, 5 V y 3.3 V).
 - La resistencia shunt se elige según la corriente máxima del motor:
   `R = 0.163 V / I_max` (por ejemplo, 0.05 Ω da hasta ~3.2 A). En un sistema
@@ -184,7 +187,7 @@ Protocolo UART propuesto (tramas binarias con encabezado, longitud y CRC):
 
 | Núcleo | Tareas |
 |---|---|
-| **Cortex-M7** (480 MHz, FPU DP, caché) | Captura I2S/SAI por DMA (doble buffer); DOA: GCC-PHAT con 2 micrófonos y SRP-PHAT con 4 (barrido de ángulos o ángulo elegido por el usuario); beamforming delay-and-sum; extracción de features (FFT/log-mel con CMSIS-DSP); inferencia del autoencoder; cálculo del error de reconstrucción |
+| **Cortex-M7** (480 MHz, FPU DP, caché) | Captura I2S/SAI por DMA (doble buffer); DOA: GCC-PHAT con 2 micrófonos y SRP-PHAT con 4 (enfoque en un punto fijo elegido por el usuario, con apertura del arco ajustable); beamforming delay-and-sum; extracción de features (FFT/log-mel con CMSIS-DSP); inferencia del autoencoder; cálculo del error de reconstrucción |
 | **Cortex-M4** (240 MHz) | Lectura de la IMU por SPI y DMA; lectura del INA3221 por I2C y atención a sus pines `CRITICAL`/`WARNING`; features de vibración y de corriente; fusión de los puntajes y máquina de estados de los niveles de alerta; fail-safe (watchdog del M7, verificación de sensores); pila Ethernet/LwIP con alertas y configuración; UART hacia la pantalla TFT35 y guardado de umbrales en flash |
 | **IPC** | Memoria compartida en **SRAM4** (estructuras con número de secuencia) + **HSEM** para exclusión mutua y notificación entre núcleos |
 

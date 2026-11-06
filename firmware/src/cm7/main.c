@@ -22,6 +22,7 @@
 #include "display_fwpush.h"
 #include "display_fw_info.h"
 #include "demo.h"
+#include "ina3221.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -217,6 +218,15 @@ int main(void)
     fwpush_init(&push, HAL_GetTick());
     demo_init();
 
+    uint16_t ina_manuf = 0, ina_die = 0;
+    uint16_t ina_addr = ina3221_init(&ina_manuf, &ina_die);
+    if (ina_addr)
+        log_printf("[INA3221] encontrado en 0x%02X, fabricante 0x%04X (esperado 0x5449), chip 0x%04X (esperado 0x3220)\r\n",
+                   ina_addr, ina_manuf, ina_die);
+    else
+        log_printf("[INA3221] no responde en I2C1 (PB8/PB9, direcciones 0x40-0x43)\r\n");
+    uint32_t last_ina = 0;
+
     uint32_t last_blink = 0, btn_t0 = 0, last_log = 0;
     bool btn_prev = false;
     fwpush_state_t prev_state = push.state;
@@ -247,6 +257,22 @@ int main(void)
         }
         if (!fwpush_busy(&push) && push.state != FWPUSH_IDLE && push.state != FWPUSH_QUERY)
             demo_poll(now);
+
+        /* INA3221: lectura y log cada segundo */
+        if (ina_addr && now - last_ina >= 1000u) {
+            last_ina = now;
+            int16_t ma[3] = {0};
+            int32_t bus[3] = {0}, sh[3] = {0};
+            bool ok = true;
+            for (int ch = 0; ch < 3; ch++) {
+                ok &= ina3221_read(ch, &bus[ch], &sh[ch]);
+                ma[ch] = (int16_t)(sh[ch] / INA3221_SHUNT_MOHM);   /* uV / mOhm = mA */
+            }
+            demo_set_power(ok, ma, (uint16_t)(bus[DL_MOTOR_CH] < 0 ? 0 : bus[DL_MOTOR_CH]));
+            log_printf("[INA3221] CH1 %ld mV %d mA | CH2 %ld mV %d mA | CH3 %ld mV %d mA | CRIT %d WARN %d%s\r\n",
+                       (long)bus[0], ma[0], (long)bus[1], ma[1], (long)bus[2], ma[2],
+                       ina3221_critical(), ina3221_warning(), ok ? "" : " (error de lectura)");
+        }
 
         /* Botón USER: forzar actualización (flanco de subida, antirrebote) */
         bool btn = HAL_GPIO_ReadPin(BTN_PORT, BTN_PIN) == GPIO_PIN_SET;

@@ -11,8 +11,21 @@ static dl_thresholds_t thr = {
     .vib_warn_mg = 300, .vib_anom_mg = 700,
     .current_warn_ma = 1500, .current_crit_ma = 2500,
 };
-static dl_config_t cfg = { .n_mics = 2, .doa_mode = DL_DOA_SCAN, .focus_ddeg = 0 };
+static dl_config_t cfg = { .n_mics = 2, .focus_ddeg = 900, .aperture_ddeg = 300 };
 static uint32_t last_ms;
+static bool     real_valid;
+static int16_t  real_ma[3];
+static uint16_t real_bus_mv;
+
+void demo_set_power(bool valid, const int16_t ma[3], uint16_t bus_mv)
+{
+    real_valid = valid;
+    if (valid) {
+        for (int i = 0; i < 3; i++)
+            real_ma[i] = ma[i];
+        real_bus_mv = bus_mv;
+    }
+}
 
 void demo_init(void)
 {
@@ -49,14 +62,15 @@ void demo_poll(uint32_t now)
     float k = severity(now);
     int audio = (int)(400 + k * 1400 + 60 * sinf(t * 7.3f));
     int vib = (int)(120 + k * 650 + 40 * sinf(t * 3.1f));
-    int current = (int)(900 + k * 1500 + 300 * k * fabsf(sinf(t * 9.0f)));
-    int doa;
-    if (cfg.doa_mode == DL_DOA_FIXED) {
-        doa = cfg.focus_ddeg;
-    } else {
-        int span = cfg.n_mics == 4 ? 1800 : 900;
-        doa = (int)(span * 0.6f * sinf(t * 0.25f));
-    }
+    int current = real_valid ? real_ma[DL_MOTOR_CH]
+                             : (int)(900 + k * 1500 + 300 * k * fabsf(sinf(t * 9.0f)));
+    /* La fuente simulada se mueve alrededor del punto de enfoque, dentro del
+     * arco de apertura */
+    int doa = cfg.focus_ddeg + (int)(cfg.aperture_ddeg * 0.4f * sinf(t * 0.4f));
+    if (cfg.n_mics == 4)
+        doa = ((doa % 3600) + 3600) % 3600;               /* 0–359.9° */
+    else
+        doa = doa < 0 ? 0 : (doa > 1800 ? 1800 : doa);    /* 0–180° */
 
     dl_status_t st;
     memset(&st, 0, sizeof(st));
@@ -69,10 +83,10 @@ void demo_poll(uint32_t now)
     st.doa_ddeg = (int16_t)doa;
     st.audio_score_m = (uint16_t)(audio < 0 ? 0 : audio);
     st.vib_rms_mg = (uint16_t)(vib < 0 ? 0 : vib);
-    st.current_ma[0] = (int16_t)current;
-    st.current_ma[1] = 120;
-    st.current_ma[2] = 80;
-    st.motor_bus_mv = 12000;
+    st.current_ma[0] = real_valid ? real_ma[0] : 120;
+    st.current_ma[1] = real_valid ? real_ma[1] : 80;
+    st.current_ma[DL_MOTOR_CH] = (int16_t)current;
+    st.motor_bus_mv = real_valid ? real_bus_mv : 12000;
     st.uptime_ms = now;
     link_send(DL_MSG_STATUS, &st, sizeof(st));
 }

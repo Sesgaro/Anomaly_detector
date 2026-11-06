@@ -3,8 +3,8 @@
 #include <math.h>
 #include <string.h>
 
-#define SWEEP_DEG     270.0f
-#define START_DEG     135.0f      /* 0° = derecha, sentido horario (como LVGL) */
+#define DEFAULT_SWEEP 270.0f      /* ángulos LVGL: 0° = derecha, sentido horario */
+#define TOP_DEG       270.0f      /* el recorrido se centra arriba */
 #define TRACK_W       8
 #define WAVE_AMP      3.0f        /* px */
 #define WAVE_LEN      26.0f       /* px por onda (como la app) */
@@ -16,6 +16,9 @@
 
 typedef struct {
     int32_t    min, max, value;
+    float      sweep;             /* 180, 270 o 360 (vuelta completa) */
+    bool       band;
+    int32_t    band_lo, band_hi;
     lv_color_t accent, cookie;
     lv_obj_t  *lbl_value, *lbl_caption;
 } dial_t;
@@ -54,13 +57,37 @@ static void cookie_build(int r)
     cookie_img.data = cookie_buf;
 }
 
+static bool is_wrap(const dial_t *d)
+{
+    return d->sweep >= 359.0f;
+}
+
+/* El recorrido se centra arriba. La vuelta completa empieza a la izquierda,
+ * igual que el semicírculo, para que 0° (izquierda), 90° (frente, arriba) y
+ * 180° (derecha) queden en el mismo lugar con 2 y con 4 micrófonos. */
+static float start_deg(const dial_t *d)
+{
+    return is_wrap(d) ? TOP_DEG - 90.0f : TOP_DEG - d->sweep / 2.0f;
+}
+
+/* Valor -> ángulo de LVGL. Con recorrido limitado se satura en los topes;
+ * con vuelta completa no se satura (los arcos pueden cruzar ±180°). */
 static float val_to_deg(const dial_t *d, float v)
 {
     if (d->max <= d->min)
-        return START_DEG;
+        return start_deg(d);
     float f = (v - d->min) / (float)(d->max - d->min);
-    f = f < 0.0f ? 0.0f : (f > 1.0f ? 1.0f : f);
-    return START_DEG + SWEEP_DEG * f;
+    if (!is_wrap(d))
+        f = f < 0.0f ? 0.0f : (f > 1.0f ? 1.0f : f);
+    return start_deg(d) + d->sweep * f;
+}
+
+/* Ángulo para lv_draw_arc: no negativo (LVGL acepta hasta 720) */
+static uint16_t arc_deg(float deg)
+{
+    while (deg < 0.0f)
+        deg += 360.0f;
+    return (uint16_t)lroundf(deg);
 }
 
 static lv_point_t polar(lv_coord_t cx, lv_coord_t cy, float r, float deg)
@@ -99,8 +126,21 @@ static void draw_cb(lv_event_t *e)
     arc.color = M3_SURFACE_CONT_HIGHEST;
     arc.width = TRACK_W;
     arc.rounded = 1;
-    lv_draw_arc(ctx, &arc, &c, (uint16_t)(track_r + TRACK_W / 2), (uint16_t)START_DEG,
-                (uint16_t)((int)(START_DEG + SWEEP_DEG) % 360));
+    lv_draw_arc(ctx, &arc, &c, (uint16_t)(track_r + TRACK_W / 2), arc_deg(start_deg(d)),
+                arc_deg(start_deg(d) + d->sweep));
+
+    /* 1b. Apertura: arco fino por fuera de la pista */
+    if (d->band) {
+        float b0 = val_to_deg(d, (float)d->band_lo), b1 = val_to_deg(d, (float)d->band_hi);
+        if (b1 - b0 >= 1.0f) {
+            lv_draw_arc_dsc_t band;
+            lv_draw_arc_dsc_init(&band);
+            band.color = M3_TERTIARY;
+            band.width = 4;
+            band.rounded = 1;
+            lv_draw_arc(ctx, &band, &c, (uint16_t)(size / 2 - 1), arc_deg(b0), arc_deg(b1));
+        }
+    }
 
     /* 2. Pista activa ondulada: desde 0 si el rango lo incluye, si no desde
      *    el mínimo; la onda nace y muere plana */
@@ -132,7 +172,9 @@ static void draw_cb(lv_event_t *e)
     tk.color = M3_OUTLINE_VARIANT;
     tk.round_start = tk.round_end = 1;
     for (int i = 0; i <= N_TICKS; i++) {
-        float t = START_DEG + SWEEP_DEG * i / N_TICKS;
+        if (is_wrap(d) && i == N_TICKS)
+            break;                      /* en la vuelta completa, la última = la primera */
+        float t = start_deg(d) + d->sweep * i / N_TICKS;
         bool major = (i % 6) == 0;
         float r0 = track_r - 10.0f, r1 = r0 - (major ? 8.0f : 4.0f);
         tk.width = major ? 3 : 2;
@@ -157,7 +199,7 @@ static void draw_cb(lv_event_t *e)
     rd.radius = LV_RADIUS_CIRCLE;
 
     /* 5. Indicador: pastilla en el borde de la galleta apuntando al valor */
-    circle(ctx, &rd, polar(cx, cy, body_r - 7.0f, a1), 4, d->accent);
+    circle(ctx, &rd, polar(cx, cy, body_r - 5.0f, a1), 4, d->accent);
 
     /* 6. Punta en la pista exterior */
     lv_point_t hp = polar(cx, cy, track_r, a1);
@@ -180,6 +222,7 @@ lv_obj_t *ui_dial_create(lv_obj_t *parent, lv_coord_t size)
     dial_t *d = lv_mem_alloc(sizeof(*d));
     memset(d, 0, sizeof(*d));
     d->max = 100;
+    d->sweep = DEFAULT_SWEEP;
     d->accent = M3_PRIMARY;
     d->cookie = M3_PRIMARY_CONTAINER;
     lv_obj_set_user_data(obj, d);
@@ -220,6 +263,27 @@ void ui_dial_set_text(lv_obj_t *obj, const char *value_txt, const char *caption)
         lv_label_set_text(d->lbl_value, value_txt);
     if (caption && strcmp(lv_label_get_text(d->lbl_caption), caption) != 0)
         lv_label_set_text(d->lbl_caption, caption);
+}
+
+void ui_dial_set_sweep(lv_obj_t *obj, int sweep_deg)
+{
+    dial_t *d = lv_obj_get_user_data(obj);
+    float s = sweep_deg < 30 ? 30.0f : (sweep_deg > 360 ? 360.0f : (float)sweep_deg);
+    if (d->sweep == s)
+        return;
+    d->sweep = s;
+    lv_obj_invalidate(obj);
+}
+
+void ui_dial_set_band(lv_obj_t *obj, bool on, int32_t lo, int32_t hi)
+{
+    dial_t *d = lv_obj_get_user_data(obj);
+    if (d->band == on && d->band_lo == lo && d->band_hi == hi)
+        return;
+    d->band = on;
+    d->band_lo = lo;
+    d->band_hi = hi;
+    lv_obj_invalidate(obj);
 }
 
 void ui_dial_set_accent(lv_obj_t *obj, lv_color_t accent, lv_color_t cookie)

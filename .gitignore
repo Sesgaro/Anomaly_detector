@@ -19,3 +19,6 @@ tools/ui_sim/build/
 tools/ui_sim/build*/
 tools/ui_sim/out/
 tools/ui_sim/ui_sim
+
+# Grafo de graphify
+graphify-out/

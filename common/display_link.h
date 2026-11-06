@@ -85,10 +85,13 @@ enum {
 #define DL_FLAG_DOA_VALID    (1u << 3) /* hay una fuente detectada     */
 #define DL_FLAG_INA_CRITICAL (1u << 4) /* pin CRITICAL del INA3221     */
 
+/* Canal del INA3221 (0 = CH1 ... 2 = CH3) que mide el motor */
+#define DL_MOTOR_CH 2
+
 typedef struct __attribute__((packed)) {
     uint8_t  level;            /* DL_LEVEL_*                                   */
     uint8_t  flags;            /* DL_FLAG_*                                    */
-    int16_t  doa_ddeg;         /* ángulo DOA en décimas de grado               */
+    int16_t  doa_ddeg;         /* ángulo DOA en décimas de grado (ver abajo)   */
     uint16_t audio_score_m;    /* error de reconstrucción ×1000                */
     uint16_t vib_rms_mg;       /* vibración RMS en mg                          */
     int16_t  current_ma[3];    /* corriente de los 3 canales del INA3221 (mA)  */
@@ -105,15 +108,23 @@ typedef struct __attribute__((packed)) {
     uint16_t current_crit_ma;  /* límite CRITICAL del INA3221 (por muestra)  */
 } dl_thresholds_t;
 
-enum {
-    DL_DOA_SCAN  = 0,          /* barrido: la fuente más fuerte              */
-    DL_DOA_FIXED = 1,          /* enfoque fijo en el ángulo elegido          */
-};
+/* Ángulos (DOA y enfoque), en décimas de grado, con la misma referencia en
+ * ambos arreglos: 0° a la izquierda, 90° al frente, 180° a la derecha y
+ * 270° atrás (sentido horario visto desde arriba).
+ *   2 micrófonos: 0–1800   (semiplano frontal)
+ *   4 micrófonos: 0–3599   (vuelta completa)
+ *
+ * El arreglo siempre escucha un punto fijo: el beamforming se enfoca en
+ * focus y solo se considera el sonido dentro del arco de apertura
+ * [focus - apertura/2, focus + apertura/2]. */
+#define DL_APERTURE_MIN_DEG   5
+#define DL_APERTURE_MAX_DEG 180
 
 typedef struct __attribute__((packed)) {
     uint8_t  n_mics;           /* 2 o 4                                      */
-    uint8_t  doa_mode;         /* DL_DOA_*                                   */
+    uint8_t  reserved;
     int16_t  focus_ddeg;       /* ángulo de enfoque en décimas de grado      */
+    uint16_t aperture_ddeg;    /* ancho total del arco, en décimas de grado  */
 } dl_config_t;
 
 _Static_assert(sizeof(dl_status_t) <= DL_MAX_PAYLOAD, "status demasiado grande");

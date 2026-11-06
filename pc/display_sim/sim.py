@@ -38,7 +38,7 @@ FLAG_INA_CRITICAL = 1 << 4
 # Formatos empaquetados en little-endian, iguales a los structs de C
 STATUS_FMT = "<BBhHH3hHI"
 THRESHOLDS_FMT = "<6H"
-CONFIG_FMT = "<BBh"
+CONFIG_FMT = "<BBhH"
 
 
 def crc16(data: bytes, crc: int = 0xFFFF) -> int:
@@ -103,7 +103,7 @@ class SimH745:
         self.thr = dict(audio_warn_m=800, audio_anom_m=1500,
                         vib_warn_mg=300, vib_anom_mg=700,
                         current_warn_ma=1500, current_crit_ma=2500)
-        self.cfg = dict(n_mics=2, doa_mode=0, focus_ddeg=0)
+        self.cfg = dict(n_mics=2, focus_ddeg=900, aperture_ddeg=300)
 
     # ---------------------------------------------------------------- envío
     def send(self, msg_type, payload=b""):
@@ -114,7 +114,7 @@ class SimH745:
 
     def send_config(self):
         c = self.cfg
-        self.send(MSG_CONFIG, struct.pack(CONFIG_FMT, c["n_mics"], c["doa_mode"], c["focus_ddeg"]))
+        self.send(MSG_CONFIG, struct.pack(CONFIG_FMT, c["n_mics"], 0, c["focus_ddeg"], c["aperture_ddeg"]))
 
     def simulated_values(self):
         """Ciclo: 40 % normal, 30 % oscilación creciente, 15 % falla, 15 % recuperación."""
@@ -132,11 +132,9 @@ class SimH745:
         audio = int(400 + k * 1400 + 120 * noise * 10)
         vib = int(120 + k * 650 + 40 * math.sin(t * 3.1))
         current = int(900 + k * 1500 + 300 * k * abs(math.sin(t * 9.0)))
-        if self.cfg["doa_mode"] == 1:
-            doa = self.cfg["focus_ddeg"]
-        else:
-            span = 1800 if self.cfg["n_mics"] == 4 else 900
-            doa = int(span * 0.6 * math.sin(t * 0.25))
+        # La fuente se mueve alrededor del punto de enfoque, dentro de la apertura
+        doa = int(self.cfg["focus_ddeg"] + self.cfg["aperture_ddeg"] * 0.4 * math.sin(t * 0.4))
+        doa = doa % 3600 if self.cfg["n_mics"] == 4 else min(max(doa, 0), 1800)
         return max(audio, 0), max(vib, 0), current, doa
 
     def level_for(self, audio, vib, current, ina_crit):
@@ -161,7 +159,7 @@ class SimH745:
             flags |= FLAG_INA_CRITICAL
         uptime = int((time.monotonic() - self.t0) * 1000) & 0xFFFFFFFF
         payload = struct.pack(STATUS_FMT, level, flags, doa, min(audio, 65535),
-                              min(vib, 65535), current, 120, 80, 12000, uptime)
+                              min(vib, 65535), 120, 80, current, 12000, uptime)  # motor en CH3
         self.send(MSG_STATUS, payload)
         return level, audio, vib, current, doa
 
@@ -176,8 +174,8 @@ class SimH745:
             print("<- THRESHOLDS nuevos:", self.thr)
             self.send_thresholds()      # confirmación: la pantalla muestra "aplicados"
         elif msg_type == MSG_CONFIG and len(payload) == struct.calcsize(CONFIG_FMT):
-            n, mode, focus = struct.unpack(CONFIG_FMT, payload)
-            self.cfg = dict(n_mics=n, doa_mode=mode, focus_ddeg=focus)
+            n, _, focus, aperture = struct.unpack(CONFIG_FMT, payload)
+            self.cfg = dict(n_mics=n, focus_ddeg=focus, aperture_ddeg=aperture)
             print("<- CONFIG nueva:", self.cfg)
             self.send_config()
         elif msg_type == MSG_ACK_ALARM:
