@@ -1,0 +1,14 @@
+# Entorno de entrenamiento del autoencoder (Python 3.12)
+tensorflow[and-cuda]      # TensorFlow con CUDA y cuDNN por pip (GPU NVIDIA)
+jupyterlab
+ipykernel
+ipywidgets
+numpy
+scipy
+pandas
+matplotlib
+scikit-learn
+librosa                   # log-mel y utilidades de audio
+soundfile                 # leer/escribir WAV
+tqdm
+pyserial                  # capturar datos desde la H745 por USB
